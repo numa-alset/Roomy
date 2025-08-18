@@ -1,0 +1,45 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:frontend/features/ai/presentation/pages/ai_page.dart';
+import 'package:go_router/go_router.dart';
+import '../core/providers/global_providers.dart';
+import '../features/auth/presentation/pages/login_page.dart';
+import '../features/chat/presentation/pages/chat_page.dart';
+import '../features/call/presentation/pages/call_page.dart';
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final auth = ref.watch(authTokenProvider);
+  return GoRouter(
+    initialLocation: '/login',
+    refreshListenable:
+        GoRouterRefreshStream(ref.watch(authTokenProvider.notifier).stream),
+    redirect: (ctx, state) {
+      final loggingIn = state.matchedLocation == '/login';
+      if (auth == null && !loggingIn) return '/login';
+      if (auth != null && loggingIn) return '/chat';
+      return null;
+    },
+    routes: [
+      GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+      GoRoute(path: '/chat', builder: (_, __) => const ChatPage()),
+      GoRoute(path: '/call', builder: (_, __) => const CallPage()),
+      GoRoute(path: '/ai', builder: (_, __) => const AiPage()),
+    ],
+  );
+});
+
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListener = () => notifyListeners();
+    _sub = stream.asBroadcastStream().listen((_) => notifyListeners());
+  }
+  late final void Function() notifyListener;
+  late final StreamSubscription _sub;
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
