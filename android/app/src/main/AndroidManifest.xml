@@ -1,7 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- MANDATORY -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- RECOMMENDED (for routing mic/speaker, echo canceller configs, etc.) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
+    <!-- OPTIONAL (show offline UI, not required for networking itself) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+    <!-- DO NOT add CAMERA unless you really implement video calls -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Avoid Bluetooth permissions unless you manage BT devices in code.
+         Playing via an already-connected BT headset does NOT require BT perms. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    
     <application
         android:label="frontend"
         android:name="${applicationName}"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
