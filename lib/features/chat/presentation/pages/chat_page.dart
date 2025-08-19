@@ -20,8 +20,8 @@ class ChatPage extends ConsumerWidget {
         IconButton(
             icon: const Icon(Icons.call),
             onPressed: () {
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const CallPage()));
+              // Navigator.of(context)
+              //     .push(MaterialPageRoute(builder: (_) => const CallPage()));
             })
       ]),
       body: Column(children: [

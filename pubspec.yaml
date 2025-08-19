@@ -45,6 +45,7 @@ dependencies:
   record: ^6.1.0
   just_audio: ^0.10.4
   path: ^1.9.0
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
