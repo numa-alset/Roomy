@@ -38,16 +38,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         final res = await uc(_ctrl.text.trim());
                         res.fold((e) {
                           setState(() => _err = e.message);
-                          ref.read(authTokenProvider.notifier).state = "token";
-                          ref.read(userIdProvider.notifier).state = "user.id";
-                          context.go('/chat');
+                          ref.read(authTokenProvider.notifier).state = _ctrl.text;
+                          ref.read(userIdProvider.notifier).state = _ctrl.text;
+                          context.go('/join');
                         }, (pair) {
                           final (token, user) = pair;
                           ref.read(authTokenProvider.notifier).state = token;
                           ref.read(userIdProvider.notifier).state = user.id;
-                          Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                  builder: (_) => const ChatPage()));
+                          context.go('/join');
+                          // Navigator.of(context).pushReplacement(
+                          //     MaterialPageRoute(
+                          //         builder: (_) => const ChatPage()));
                         });
                         if (mounted) setState(() => _loading = false);
                       },
