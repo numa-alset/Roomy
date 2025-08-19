@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/features/ai/presentation/pages/ai_page.dart';
+import 'package:frontend/features/chat/presentation/pages/join_screen.dart';
 import 'package:go_router/go_router.dart';
 import '../core/providers/global_providers.dart';
 import '../features/auth/presentation/pages/login_page.dart';
@@ -23,9 +24,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
-      GoRoute(path: '/chat', builder: (_, __) => const ChatPage()),
+      GoRoute(path: '/chat', builder: (_, state) {final roomid=state.extra as String;return ChatPage(roomId: roomid,selfId: auth!,);}),
       GoRoute(path: '/call', builder: (_, __) => const CallPage()),
       GoRoute(path: '/ai', builder: (_, __) => const AiPage()),
+      GoRoute(path: '/join', builder: (_, __) =>  JoinScreen(selfCallerId: auth!)),
     ],
   );
 });
