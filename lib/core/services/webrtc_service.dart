@@ -1,64 +1,108 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:web_socket_channel/io.dart';
 
+typedef OnRemoteStream = void Function(String peerId, MediaStream stream);
+typedef OnMessageReceived = void Function(String from, String message);
 
 class WebRTCService {
   final String roomId;
   final String selfId;
+
   late MediaStream _localStream;
+  MediaStream get localStream => _localStream;
+
   final Map<String, RTCPeerConnection> _peerConnections = {};
   final Map<String, MediaStream> remoteStreams = {};
-  final Map<String, RTCDataChannel> _dataChannels = {};
+  final Map<String, RTCDataChannel> _dataChannels = {}; // optional if you keep P2P chat
   late IOWebSocketChannel _channel;
-  /// callback for incoming text messages
-  void Function(String from, String message)? onMessageReceived;
+
+  /// callbacks
+  OnMessageReceived? onMessageReceived;
+  OnRemoteStream? onRemoteStream;
+  void Function(String peerId)? onPeerLeft;
 
   WebRTCService({required this.roomId, required this.selfId});
 
   Future<void> init() async {
+    // Get local audio
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
       'video': false,
     });
 
-    _channel = IOWebSocketChannel.connect("ws://localhost:3000");
+    try {
+      // Connect to WS server
+      _channel = IOWebSocketChannel.connect("ws://192.168.1.107:3000");
+      debugPrint("Connecting to WebSocket at ws://192.168.1.107:3000...");
+    } catch (e) {
+      debugPrint("WebSocket connection failed: $e");
+      return;
+    }
 
-    _channel.stream.listen((event) async {
-      final data = jsonDecode(event);
-      final type = data['type'];
+    // Listen for incoming messages
+    _channel.stream.listen(
+          (event) async {
+        debugPrint(" WS event: $event");
 
-      switch (type) {
-        case 'new-user':
-          _createOffer(data['id']);
-          break;
+        final data = jsonDecode(event);
+        final type = data['type'];
 
-        case 'offer':
-          await _handleOffer(data['from'], data['sdp']);
-          break;
+        switch (type) {
+          case 'new-user':
+            debugPrint(" New user joined: ${data['id']}");
+            _createOffer(data['id']);
+            break;
 
-        case 'answer':
-          await _peerConnections[data['from']]?.setRemoteDescription(
-            RTCSessionDescription(data['sdp'], 'answer'),
-          );
-          break;
+          case 'offer':
+            debugPrint("Received offer from: ${data['from']}");
+            await _handleOffer(data['from'], data['sdp']);
+            break;
 
-        case 'ice-candidate':
-          final candidate = RTCIceCandidate(
-            data['candidate']['candidate'],
-            data['candidate']['sdpMid'],
-            data['candidate']['sdpMLineIndex'],
-          );
-          await _peerConnections[data['from']]?.addCandidate(candidate);
-          break;
-      }
-    });
+          case 'answer':
+            debugPrint("Received answer from: ${data['from']}");
+            await _peerConnections[data['from']]?.setRemoteDescription(
+              RTCSessionDescription(data['sdp'], 'answer'),
+            );
+            break;
 
-    // join room
+          case 'ice-candidate':
+            debugPrint("ICE candidate from: ${data['from']}");
+            final candidate = RTCIceCandidate(
+              data['candidate']?['candidate'],
+              data['candidate']?['sdpMid'],
+              data['candidate']?['sdpMLineIndex'],
+            );
+            await _peerConnections[data['from']]?.addCandidate(candidate);
+            break;
+
+          case 'chat':
+            final from = (data['from'] ?? 'unknown').toString();
+            final text = (data['text'] ?? '').toString();
+            debugPrint("💬 Chat from $from: $text");
+            onMessageReceived?.call(from, text);
+            break;
+
+          case 'user-left':
+            debugPrint(" User left: ${data['id']}");
+            _removePeer(data['id']);
+            break;
+
+
+          default:
+            debugPrint("Unknown WS type: $type");
+        }
+      },
+      onDone: () => debugPrint("WebSocket closed"),
+      onError: (e) => debugPrint("WebSocket error: $e"),
+    );
+
+    // Join room
+    debugPrint("Sending join room request: $roomId / $selfId");
     _channel.sink.add(jsonEncode({'type': 'join', 'room': roomId, 'id': selfId}));
   }
 
-  MediaStream get localStream => _localStream;
 
   Future<RTCPeerConnection> _createPeerConnection(String peerId) async {
     final config = {
@@ -70,14 +114,16 @@ class WebRTCService {
     final pc = await createPeerConnection(config);
 
     // Add local audio
-    _localStream.getTracks().forEach((track) {
-      pc.addTrack(track, _localStream);
-    });
+    for (final track in _localStream.getTracks()) {
+      await pc.addTrack(track, _localStream);
+    }
 
-    // Handle remote audio
+    // Remote audio
     pc.onTrack = (event) {
       if (event.streams.isNotEmpty) {
-        remoteStreams[peerId] = event.streams[0];
+        final stream = event.streams[0];
+        remoteStreams[peerId] = stream;
+        onRemoteStream?.call(peerId, stream);
       }
     };
 
@@ -88,18 +134,16 @@ class WebRTCService {
         'from': selfId,
         'to': peerId,
         'candidate': candidate.toMap(),
+        'room': roomId,
       }));
     };
 
-    // Data channel (for sending messages)
+    // OPTIONAL: DataChannel (P2P chat) — keep or remove
     if (selfId.compareTo(peerId) < 0) {
-      // create channel only from one side to avoid duplicates
       final dc = await pc.createDataChannel("chat", RTCDataChannelInit());
       _setupDataChannel(peerId, dc);
       _dataChannels[peerId] = dc;
     }
-
-    // Handle when remote creates a data channel
     pc.onDataChannel = (dc) {
       _setupDataChannel(peerId, dc);
       _dataChannels[peerId] = dc;
@@ -111,9 +155,8 @@ class WebRTCService {
 
   void _setupDataChannel(String peerId, RTCDataChannel dc) {
     dc.onMessage = (msg) {
-      if (onMessageReceived != null) {
-        onMessageReceived!(peerId, msg.text);
-      }
+      // If you want to also surface P2P messages to UI:
+      onMessageReceived?.call(peerId, msg.text);
     };
   }
 
@@ -127,6 +170,7 @@ class WebRTCService {
       'from': selfId,
       'to': peerId,
       'sdp': offer.sdp,
+      'room': roomId,
     }));
   }
 
@@ -142,16 +186,32 @@ class WebRTCService {
       'from': selfId,
       'to': peerId,
       'sdp': answer.sdp,
+      'room': roomId,
     }));
   }
 
-  /// Send text message to all connected peers
-  void sendMessage(String message) {
-    _dataChannels.forEach((peerId, dc) {
-      if (dc.state == RTCDataChannelState.RTCDataChannelOpen) {
-        dc.send(RTCDataChannelMessage(message));
-      }
-    });
+  /// Send text message via the server (broadcast to room)
+  void sendChat(String message) {
+    _channel.sink.add(jsonEncode({
+      'type': 'chat',
+      'room': roomId,
+      'id': selfId,
+      'text': message,
+    }));
+  }
+
+  void _removePeer(String peerId) {
+    _peerConnections[peerId]?.close();
+    _peerConnections.remove(peerId);
+
+    // If you store renderers per peer in UI, trigger UI to remove them there.
+    remoteStreams[peerId]?.dispose();
+    remoteStreams.remove(peerId);
+
+    _dataChannels[peerId]?.close();
+    _dataChannels.remove(peerId);
+    // Notify UI
+    onPeerLeft?.call(peerId);
   }
 
   void dispose() {
