@@ -17,9 +17,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable:
         GoRouterRefreshStream(ref.watch(authTokenProvider.notifier).stream),
     redirect: (ctx, state) {
+      print("auth");
+      print(auth);
       final loggingIn = state.matchedLocation == '/login';
       if (auth == null && !loggingIn) return '/login';
-      if (auth != null && loggingIn) return '/chat';
+      if (auth != null && loggingIn) return '/join';
       return null;
     },
     routes: [
