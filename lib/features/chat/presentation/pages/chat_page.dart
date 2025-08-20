@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/core/services/webrtc_service.dart';
+import 'package:go_router/go_router.dart';
+
 
 class ChatPage extends StatefulWidget {
   final String roomId;
   final String selfId;
-
   const ChatPage({super.key, required this.roomId, required this.selfId});
 
   @override
@@ -13,75 +14,105 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  late WebRTCService _webrtcService;
-  final TextEditingController _chatController = TextEditingController();
-  final List<String> messages = [];
-  final Map<String, RTCVideoRenderer> remoteRenderers = {};
-  late RTCVideoRenderer _localRenderer;
+  late WebRTCService _svc;
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  final Map<String, RTCVideoRenderer> _remoteRenderers = {};
+  final List<String> _messages = [];
+  final _msgCtrl = TextEditingController();
   bool _micOn = true;
 
   @override
   void initState() {
     super.initState();
-    _initWebRTC();
+    _init();
   }
 
-  Future<void> _initWebRTC() async {
-    _webrtcService = WebRTCService(
-      roomId: widget.roomId,
-      selfId: widget.selfId,
-    );
-    _webrtcService.onMessageReceived = (from, msg) {
-      setState(() => messages.add("$from: $msg"));
+  Future<void> _init() async {
+    _svc = WebRTCService(roomId: widget.roomId, selfId: widget.selfId);
+
+    _svc.onMessageReceived = (from, text) {
+      setState(() => _messages.add("${from == widget.selfId ? "Me" : from}: $text"));
     };
-    await _webrtcService.init();
 
-    // Setup local renderer
-    _localRenderer = RTCVideoRenderer();
+    _svc.onRemoteStream = (peerId, stream) async {
+      final r = RTCVideoRenderer();
+      await r.initialize();
+      r.srcObject = stream;
+      setState(() => _remoteRenderers[peerId] = r);
+    };
+
+    _svc.onPeerLeft = (peerId) {
+      setState(() {
+        _remoteRenderers[peerId]?.dispose();
+        _remoteRenderers.remove(peerId);
+      });
+    };
+    await _svc.init();
+
     await _localRenderer.initialize();
-    _localRenderer.srcObject = _webrtcService.localStream;
-
-    // Listen for remote streams
-    _webrtcService.remoteStreams.forEach((peerId, stream) async {
-      final renderer = RTCVideoRenderer();
-      await renderer.initialize();
-      renderer.srcObject = stream;
-      remoteRenderers[peerId] = renderer;
-      setState(() {});
-    });
-  }
-
-  void _sendMessage() {
-    final text = _chatController.text.trim();
-    if (text.isEmpty) return;
-    _webrtcService.sendMessage(text);
-    setState(() => messages.add("Me: $text"));
-    _chatController.clear();
-  }
-
-  void _toggleMic() {
-    setState(() => _micOn = !_micOn);
-    _webrtcService.localStream.getAudioTracks().forEach((track) {
-      track.enabled = _micOn;
-    });
+    _localRenderer.srcObject = _svc.localStream;
+    setState(() {});
   }
 
   @override
   void dispose() {
-    for (var r in remoteRenderers.values) {
+    _msgCtrl.dispose();
+    _localRenderer.dispose();
+    for (final r in _remoteRenderers.values) {
       r.dispose();
     }
-    _localRenderer.dispose();
-    _webrtcService.dispose();
-    _chatController.dispose();
+    _svc.dispose();
     super.dispose();
+  }
+
+  void _toggleMic() {
+    setState(() => _micOn = !_micOn);
+    for (final t in _svc.localStream.getAudioTracks()) {
+      t.enabled = _micOn;
+    }
+  }
+
+  void _send() {
+    final txt = _msgCtrl.text.trim();
+    if (txt.isEmpty) return;
+    _svc.sendChat(txt);
+    _msgCtrl.clear();
   }
 
   @override
   Widget build(BuildContext context) {
+    final tiles = <Widget>[
+      // local (audio-only; still needs a renderer to play)
+      if (_localRenderer.textureId != null)
+        Card(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(_micOn ? Icons.mic : Icons.mic_off, size: 36),
+              const SizedBox(height: 8),
+              Text(widget.selfId),
+            ],
+          ),
+        ),
+      // remotes
+      ..._remoteRenderers.entries.map((e) => Card(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.hearing, size: 36),
+            const SizedBox(height: 8),
+            Text("Peer: ${e.key}"),
+            // Note: audio plays even if you don't show the RTCVideoView.
+            // If you want to keep it invisible, you can comment it out.
+            SizedBox(height: 1, width: 1, child: RTCVideoView(e.value)),
+          ],
+        ),
+      )),
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("Room: ${widget.roomId}"),
+        title: Text("Room ${widget.roomId}"),
         actions: [
           IconButton(
             icon: Icon(_micOn ? Icons.mic : Icons.mic_off),
@@ -89,72 +120,63 @@ class _ChatPageState extends State<ChatPage> {
           ),
           IconButton(
             icon: const Icon(Icons.call_end, color: Colors.red),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () { _svc.dispose(); context.go('/join');},
           ),
         ],
       ),
       body: Column(
         children: [
-          // Audio grid
+          // Voice tiles (audio-only)
           Expanded(
             flex: 2,
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-              ),
-              itemCount: remoteRenderers.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) return RTCVideoView(_localRenderer, mirror: true);
-                final renderer = remoteRenderers.values.elementAt(index - 1);
-                return RTCVideoView(renderer);
-              },
+            child: GridView.count(
+              crossAxisCount: 2,
+              padding: const EdgeInsets.all(8),
+              children: tiles,
             ),
           ),
           const Divider(height: 1),
-          // Chat area
+          // Chat
           Expanded(
             child: Column(
               children: [
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(8),
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) => Align(
-                      alignment: messages[i].startsWith("Me:")
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: messages[i].startsWith("Me:") ? Colors.blueAccent : Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          messages[i],
-                          style: TextStyle(
-                            color: messages[i].startsWith("Me:") ? Colors.white : Colors.black,
+                    itemCount: _messages.length,
+                    itemBuilder: (_, i) {
+                      final mine = _messages[i].startsWith("Me:");
+                      return Align(
+                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: mine ? Colors.blueAccent : Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _messages[i],
+                            style: TextStyle(color: mine ? Colors.white : Colors.black),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: _chatController,
+                        controller: _msgCtrl,
                         decoration: const InputDecoration(
                           hintText: "Type a message...",
                           contentPadding: EdgeInsets.symmetric(horizontal: 12),
                         ),
+                        onSubmitted: (_) => _send(),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _sendMessage,
-                    ),
+                    IconButton(icon: const Icon(Icons.send), onPressed: _send),
                   ],
                 ),
               ],
