@@ -27,4 +27,14 @@ class AiRemoteDs {
       onSendProgress: onProgress,
     );
   }
+  Future<Map<String, dynamic>> sendText({
+    required String text,
+  }) {
+    return client.postJson(
+      '/v1/ai/voice',
+      {
+      "text":text
+      }
+    );
+  }
 }

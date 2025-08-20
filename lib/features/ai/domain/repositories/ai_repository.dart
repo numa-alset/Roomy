@@ -7,4 +7,7 @@ abstract class AiRepository {
     required String filePath,
     void Function(int sent, int total)? onProgress,
   });
+  Future<Result<Failure, AiResponse>> sendText({
+    required String text,
+  });
 }

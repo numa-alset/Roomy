@@ -17,15 +17,36 @@ class AiRepositoryImpl implements AiRepository {
     void Function(int, int)? onProgress,
   }) async {
     try {
-      final res = await remote.sendVoice(
-        filePath: filePath,
-        cancelToken: CancelToken(), // could be passed in for cancel
-        onProgress: onProgress,
-      );
-      final text = (res['text'] ?? '') as String;
-      final audioUrl = (res['audioUrl'] ?? '') as String;
-      if (audioUrl.isEmpty) return Err(Failure('No audioUrl from server'));
-      return Ok(AiResponse(text: text, audioUrl: audioUrl));
+      await Future.delayed(const Duration(seconds: 2));
+      return Ok(AiResponse(
+        text: "This is a fake AI response for voice",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      ));
+      // final res = await remote.sendVoice(
+      //   filePath: filePath,
+      //   cancelToken: CancelToken(), // could be passed in for cancel
+      //   onProgress: onProgress,
+      // );
+      // final text = (res['text'] ?? '') as String;
+      // final audioUrl = (res['audioUrl'] ?? '') as String;
+      // if (audioUrl.isEmpty) return Err(Failure('No audioUrl from server'));
+      // return Ok(AiResponse(text: text, audioUrl: audioUrl));
+    } catch (e) {
+      return Err(Failure(e.toString()));
+    }
+  }
+  @override
+  Future<Result<Failure, AiResponse>> sendText({required String text}) async {
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      return Ok(AiResponse(
+        text: "This is a fake AI response for voice",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      ));
+      // final res = await remote.sendText(text: text);
+      // final reply = (res['text'] ?? '') as String;
+      // final audioUrl = (res['audioUrl'] ?? '') as String;
+      // return Ok(AiResponse(text: reply, audioUrl: audioUrl));
     } catch (e) {
       return Err(Failure(e.toString()));
     }
@@ -89,6 +110,9 @@ class AiController extends StateNotifier<AiState> {
       (ok) => state = state.copyWith(
           uploading: false, transcript: ok.text, audioUrl: ok.audioUrl),
     );
+  }
+  Future<Result<Failure, AiResponse>> sendText(String text) {
+    return ref.read(aiRepoProvider).sendText(text: text);
   }
 }
 

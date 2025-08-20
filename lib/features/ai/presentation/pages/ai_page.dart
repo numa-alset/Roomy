@@ -1,6 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:frontend/features/ai/presentation/pages/loading_bubble.dart';
+import 'package:frontend/features/ai/presentation/pages/text_bubble.dart';
+import 'package:frontend/features/ai/presentation/pages/voice_bubble.dart';
 import 'package:record/record.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../../core/providers/global_providers.dart';
@@ -15,20 +17,47 @@ class AiPage extends ConsumerStatefulWidget {
 }
 
 class _AiPageState extends ConsumerState<AiPage> {
-  final _rec = AudioRecorder(); // record 5.x
+  final _rec = AudioRecorder();
   final _player = AudioPlayer();
+  int? _playingIndex;
   String? _lastPath;
+  bool _sending = false;
+
+  final _textCtrl = TextEditingController();
+  final List<ChatMessage> _chat = [];
 
   @override
   void dispose() {
     _player.dispose();
+    _textCtrl.dispose();
     super.dispose();
+  }
+
+  void _playVoice(String url, int index) async {
+    if (_playingIndex == index) {
+      // toggle stop
+      await _player.stop();
+      setState(() => _playingIndex = null);
+    } else {
+      // stop previous
+      await _player.stop();
+      await _player.setUrl(url);
+      await _player.play();
+      setState(() => _playingIndex = index);
+    }
+
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        setState(() => _playingIndex = null);
+      }
+    });
   }
   Future<String> _getSafePath() async {
     final dir = await getApplicationDocumentsDirectory();
     final fileName = 'recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
     return p.join(dir.path, fileName);
   }
+
   Future<void> _startRec() async {
     if (!await _rec.hasPermission()) {
       if (!mounted) return;
@@ -40,8 +69,7 @@ class _AiPageState extends ConsumerState<AiPage> {
     await _rec.start(
         const RecordConfig(
             encoder: AudioEncoder.aacLc, sampleRate: 44100, bitRate: 128000),
-        path: path
-    );
+        path: path);
     _lastPath = path;
     ref.read(aiControllerProvider.notifier).setRecording(true);
   }
@@ -55,11 +83,56 @@ class _AiPageState extends ConsumerState<AiPage> {
     final state = ref.read(aiControllerProvider);
     final base = ref.read(baseUrlProvider);
     final url = state.audioUrl;
+
+    _chat.add(ChatMessage(
+        role: "user", text: "(voice message)", audioUrl: _lastPath, isVoice: true));
+    _chat.add(ChatMessage(
+        role: "ai", text: state.transcript, audioUrl: url, isVoice: url != null));
+    setState(() {});
+
     if (url != null && url.isNotEmpty) {
       final full = url.startsWith('http') ? url : '$base$url';
       await _player.setUrl(full);
-      await _player.play();
+      // await _player.play();
     }
+  }
+
+  Future<void> _sendText() async {
+    final text = _textCtrl.text.trim();
+    if (text.isEmpty) return;
+    _textCtrl.clear();
+    FocusScope.of(context).unfocus();
+    _sending = true;
+    // 1️⃣ Add user message
+    _chat.add(ChatMessage(role: "user", text: text));
+    // 2️⃣ Add temporary loading message
+    final loadingIndex = _chat.length;
+    _chat.add(ChatMessage(role: "ai", text: "loading...", isVoice: false));
+    setState(() {});
+
+    // 3️⃣ Send request
+    final r = await ref.read(aiControllerProvider.notifier).sendText(text);
+    r.fold(
+          (e) {
+        _chat[loadingIndex] =
+            ChatMessage(role: "ai", text: "Error: ${e.message}");
+        setState(() {_sending = false;});
+      },
+          (ok) async {
+        _chat[loadingIndex] = ChatMessage(
+            role: "ai", text: ok.text, audioUrl: ok.audioUrl, isVoice: ok.audioUrl.isNotEmpty);
+        setState(() {_sending = false;});
+
+        if (ok.audioUrl.isNotEmpty) {
+          final base = ref.read(baseUrlProvider);
+          final full = ok.audioUrl.startsWith('http')
+              ? ok.audioUrl
+              : '$base${ok.audioUrl}';
+          await _player.setUrl(full);
+          await _player.play();
+        }
+      },
+    );
   }
 
   @override
@@ -67,33 +140,72 @@ class _AiPageState extends ConsumerState<AiPage> {
     final s = ref.watch(aiControllerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('AI Voice Assistant')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(
-              'Transcript:\n${s.transcript.isEmpty ? "(none yet)" : s.transcript}'),
-          const SizedBox(height: 12),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _chat.length,
+              itemBuilder: (context, index) {
+                final msg = _chat[index];
+                if (msg.text == "loading...") {
+                  return const LoadingBubble(role: "ai");
+                } else if (msg.isVoice && msg.audioUrl != null) {
+                  return VoiceBubble(
+                    audioUrl: msg.audioUrl!,
+                    role: msg.role,
+                    isPlaying: _playingIndex == index, // track currently playing bubble
+                    onTap: () => _playVoice(msg.audioUrl!, index), // tell the shared player what to play
+                  );
+
+                } else {
+                  return TextBubble(text: msg.text, role: msg.role);
+                }
+              },
+            ),
+          ),
           if (s.uploading)
             LinearProgressIndicator(
                 value: s.progress > 0 && s.progress < 1 ? s.progress : null),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            icon: Icon(s.recording ? Icons.stop : Icons.mic),
-            label: Text(s.recording ? 'Stop & Send' : 'Start Recording'),
-            onPressed: s.uploading
-                ? null
-                : () => s.recording ? _stopSend() : _startRec(),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _textCtrl,
+                  decoration: const InputDecoration(
+                    hintText: "Type a message",
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _sendText(),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: (s.uploading||_sending) ? null : _sendText,
+              ),
+              IconButton(
+                icon: Icon(s.recording ? Icons.stop : Icons.mic),
+                onPressed: (s.uploading||_sending)
+                    ? null
+                    : () => s.recording ? _stopSend() : _startRec(),
+              ),
+            ],
           ),
-          if (_lastPath != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text(
-                  'Last file: ${_lastPath!.split(Platform.pathSeparator).last}',
-                  style: const TextStyle(fontSize: 12)),
-            ),
-        ]),
+        ],
       ),
     );
   }
+}
+class ChatMessage {
+  final String role; // "user" or "ai"
+  final String text;
+  final String? audioUrl;
+  final bool isVoice;
+
+  ChatMessage({
+    required this.role,
+    required this.text,
+    this.audioUrl,
+    this.isVoice = false,
+  });
 }
