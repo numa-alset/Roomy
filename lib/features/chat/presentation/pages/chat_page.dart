@@ -111,6 +111,15 @@ class _ChatPageState extends State<ChatPage> {
     ];
 
     return Scaffold(
+      floatingActionButton: Padding(
+        padding: EdgeInsetsGeometry.only(bottom: 40),
+        child: FloatingActionButton(onPressed: () {
+context.push("/ai");
+        },
+        child: Icon(Icons.question_mark),
+
+        ),
+      ),floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       appBar: AppBar(
         title: Text("Room ${widget.roomId}"),
         actions: [
@@ -128,7 +137,7 @@ class _ChatPageState extends State<ChatPage> {
         children: [
           // Voice tiles (audio-only)
           Expanded(
-            flex: 2,
+            // flex: 2,
             child: GridView.count(
               crossAxisCount: 2,
               padding: const EdgeInsets.all(8),
@@ -138,48 +147,54 @@ class _ChatPageState extends State<ChatPage> {
           const Divider(height: 1),
           // Chat
           Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: _messages.length,
-                    itemBuilder: (_, i) {
-                      final mine = _messages[i].startsWith("Me:");
-                      return Align(
-                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          decoration: BoxDecoration(
-                            color: mine ? Colors.blueAccent : Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              color: Colors.grey.shade200,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _messages.length,
+                      itemBuilder: (_, i) {
+                        final mine = _messages[i].startsWith("Me:");
+                        return Align(
+                          alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: mine ? Colors.blueAccent : Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _messages[i],
+                              style: TextStyle(color: mine ? Colors.white : Colors.black),
+                            ),
                           ),
-                          child: Text(
-                            _messages[i],
-                            style: TextStyle(color: mine ? Colors.white : Colors.black),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _msgCtrl,
-                        decoration: const InputDecoration(
-                          hintText: "Type a message...",
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        onSubmitted: (_) => _send(),
-                      ),
+                        );
+                      },
                     ),
-                    IconButton(icon: const Icon(Icons.send), onPressed: _send),
-                  ],
-                ),
-              ],
+                  ),
+                  Container(
+                    color: Colors.white,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _msgCtrl,
+                            decoration: const InputDecoration(
+                              hintText: "Type a message...",
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            onSubmitted: (_) => _send(),
+                          ),
+                        ),
+                        IconButton(icon: const Icon(Icons.send), onPressed: _send),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
