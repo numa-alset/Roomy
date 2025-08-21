@@ -75,6 +75,13 @@ class DioClient {
     if (data is Map<String, dynamic>) return data;
     return Map<String, dynamic>.from(data);
   }
+  Future<Map<String, dynamic>> get(String path,
+      {CancelToken? cancelToken}) async {
+    final r = await dio.get(path, cancelToken: cancelToken);
+    final data = r.data;
+    if (data is Map<String, dynamic>) return data;
+    return Map<String, dynamic>.from(data);
+  }
 
   Future<Map<String, dynamic>> postMultipart(
     String path, {
