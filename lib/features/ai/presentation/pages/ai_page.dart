@@ -22,10 +22,25 @@ class _AiPageState extends ConsumerState<AiPage> {
   int? _playingIndex;
   String? _lastPath;
   bool _sending = false;
-
+  bool _loading = false;
   final _textCtrl = TextEditingController();
   final List<ChatMessage> _chat = [];
 
+  @override
+  void initState() {
+    // TODO: implement initState
+
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed ||
+          state.processingState == ProcessingState.idle) {
+        setState(() {
+          _playingIndex = null;
+          _loading = false;
+        });
+      }
+    });
+    super.initState();
+  }
   @override
   void dispose() {
     _player.dispose();
@@ -34,25 +49,38 @@ class _AiPageState extends ConsumerState<AiPage> {
   }
 
   void _playVoice(String url, int index) async {
-    if (_playingIndex == index) {
-      // toggle stop
-      await _player.stop();
-      setState(() => _playingIndex = null);
-    } else {
-      // stop previous
-      await _player.stop();
-      await _player.setUrl(url);
-      await _player.play();
-      setState(() => _playingIndex = index);
-    }
-
-    _player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) {
-        setState(() => _playingIndex = null);
+    try {
+      if (_playingIndex == index) {
+        await _player.stop();
+        setState(() {
+          _playingIndex = null;
+          _loading = false;
+        });
+        return;
       }
-    });
+
+      setState(() {
+        _loading = true;
+        _playingIndex = index;
+      });
+
+      final audioSource = LockCachingAudioSource(Uri.parse(url));
+      await _player.setAudioSource(audioSource);
+      await _player.play();
+
+      setState(() {
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _playingIndex = null;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Audio error: $e")));
+    }
   }
-  Future<String> _getSafePath() async {
+    Future<String> _getSafePath() async {
     final dir = await getApplicationDocumentsDirectory();
     final fileName = 'recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
     return p.join(dir.path, fileName);
@@ -88,6 +116,8 @@ class _AiPageState extends ConsumerState<AiPage> {
         role: "user", text: "(voice message)", audioUrl: _lastPath, isVoice: true));
     _chat.add(ChatMessage(
         role: "ai", text: state.transcript, audioUrl: url, isVoice: url != null));
+    _chat.add(ChatMessage(
+        role: "ai", text: state.transcript, audioUrl: url, isVoice: false));
     setState(() {});
 
     if (url != null && url.isNotEmpty) {
@@ -121,6 +151,8 @@ class _AiPageState extends ConsumerState<AiPage> {
           (ok) async {
         _chat[loadingIndex] = ChatMessage(
             role: "ai", text: ok.text, audioUrl: ok.audioUrl, isVoice: ok.audioUrl.isNotEmpty);
+        _chat.add(ChatMessage(
+            role: "ai", text: ok.text, audioUrl: ok.audioUrl, isVoice: false));
         setState(() {_sending = false;});
 
         if (ok.audioUrl.isNotEmpty) {
@@ -129,7 +161,7 @@ class _AiPageState extends ConsumerState<AiPage> {
               ? ok.audioUrl
               : '$base${ok.audioUrl}';
           await _player.setUrl(full);
-          await _player.play();
+          // await _player.play();
         }
       },
     );
@@ -154,10 +186,10 @@ class _AiPageState extends ConsumerState<AiPage> {
                   return VoiceBubble(
                     audioUrl: msg.audioUrl!,
                     role: msg.role,
-                    isPlaying: _playingIndex == index, // track currently playing bubble
-                    onTap: () => _playVoice(msg.audioUrl!, index), // tell the shared player what to play
+                    // isPlaying: _playingIndex == index,
+                    // isLoading: _loading && _playingIndex == index,
+                    // onTap: () => _playVoice(msg.audioUrl!, index),
                   );
-
                 } else {
                   return TextBubble(text: msg.text, role: msg.role);
                 }
