@@ -14,7 +14,10 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Result<Failure, (String token, User user)>> mockLogin(
       String username) async {
     try {
-      final (t, u) = await remote.mockLogin(username);
+        // final (t, u) = await remote.mockLogin(username);
+      await Future.delayed(Duration(seconds: 2));
+      var t = username;
+      var u = User(id: '1', username: username);
       return Ok((t, u));
     } catch (e) {
       return Err(Failure(e.toString()));

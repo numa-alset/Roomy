@@ -152,20 +152,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   void _submit(MockLoginUc uc) async{
-    setState(() => _isLoading = true);
-    final res = await uc(_nameController.text.trim());
-    res.fold((e) {
-      Fluttertoast.showToast(
-          msg: e.message,
-          backgroundColor: Colors.grey,
-          textColor: Colors.white);
-      ref.read(authTokenProvider.notifier).state = _nameController.text;
-      ref.read(userIdProvider.notifier).state = _nameController.text;
-    }, (pair) {
-      final (token, user) = pair;
-      ref.read(authTokenProvider.notifier).state = token;
-      ref.read(userIdProvider.notifier).state = user.id;
-    });
-    if (mounted) setState(() => _isLoading = false);
-  }
-}
+    _nameFocus.unfocus();
+    _passwordFocus.unfocus();
+    if (!_formKey.currentState!.validate()) return;
+        setState(() => _isLoading = true);
+        final res = await uc(_nameController.text.trim());
+        res.fold((e) {
+          Fluttertoast.showToast(
+              msg: e.message,
+              backgroundColor: Colors.grey,
+              textColor: Colors.white);
+        }, (pair) {
+          final (token, user) = pair;
+          ref.read(authTokenProvider.notifier).state = token;
+          ref.read(userIdProvider.notifier).state = user.id;
+        });
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
