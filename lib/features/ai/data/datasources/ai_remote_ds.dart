@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/network/api_url.dart';
 import '../../../../core/providers/global_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,7 +21,7 @@ class AiRemoteDs {
     void Function(int sent, int total)? onProgress,
   }) {
     return client.postMultipart(
-      '/v1/ai/voice',
+      AppUrl.sendVoiceAiUrl,
       fieldName: fieldName,
       filePath: filePath,
       cancelToken: cancelToken,
@@ -31,7 +32,7 @@ class AiRemoteDs {
     required String text,
   }) {
     return client.postJson(
-      '/v1/ai/voice',
+      AppUrl.sendTextAiUrl,
       {
       "text":text
       }

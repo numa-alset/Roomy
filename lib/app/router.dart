@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:frontend/app/app_routes.dart';
 import 'package:frontend/features/ai/presentation/pages/ai_page.dart';
 import 'package:frontend/features/chat/presentation/pages/join_screen.dart';
 import 'package:go_router/go_router.dart';
@@ -13,23 +14,21 @@ import '../features/call/presentation/pages/call_page.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authTokenProvider);
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: AppRoutes.loginPath,
     refreshListenable:
         GoRouterRefreshStream(ref.watch(authTokenProvider.notifier).stream),
     redirect: (ctx, state) {
-      print("auth");
-      print(auth);
-      final loggingIn = state.matchedLocation == '/login';
-      if (auth == null && !loggingIn) return '/login';
-      if (auth != null && loggingIn) return '/join';
+      final loggingIn = state.matchedLocation == AppRoutes.loginPath;
+      if (auth == null && !loggingIn) return AppRoutes.loginPath;
+      if (auth != null && loggingIn) return AppRoutes.joinPath;
       return null;
     },
     routes: [
-      GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
-      GoRoute(path: '/chat', builder: (_, state) {final roomid=state.extra as String;return ChatPage(roomId: roomid,selfId: auth!,);}),
-      GoRoute(path: '/call', builder: (_, __) => const CallPage()),
-      GoRoute(path: '/ai', builder: (_, __) => const AiPage()),
-      GoRoute(path: '/join', builder: (_, __) =>  JoinScreen(selfCallerId: auth!)),
+      GoRoute(path: AppRoutes.loginPath, builder: (_, __) => const LoginPage()),
+      GoRoute(path: AppRoutes.chatPath, builder: (_, state) {final roomId=state.extra as String;return ChatPage(roomId: roomId,selfId: auth!,);}),
+      GoRoute(path: AppRoutes.callPath, builder: (_, __) => const CallPage()),
+      GoRoute(path: AppRoutes.aiPath, builder: (_, __) => const AiPage()),
+      GoRoute(path: AppRoutes.joinPath, builder: (_, __) =>  JoinScreen(selfCallerId: auth!)),
     ],
   );
 });

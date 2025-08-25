@@ -39,7 +39,7 @@ class RoomRepositoryImpl implements RoomRepository {
 }
 
 final roomRepoProvider = Provider<RoomRepository>((ref) {
-  final ds = ref.watch(RoomRemoteDsProvider); // <-- use the DS provider
+  final ds = ref.watch(roomRemoteDsProvider); // <-- use the DS provider
   return RoomRepositoryImpl(ds);
 });
 

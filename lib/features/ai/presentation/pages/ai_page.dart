@@ -8,7 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import '../../../../core/providers/global_providers.dart';
 import '../providers/ai_providers.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
 
 class AiPage extends ConsumerStatefulWidget {
   const AiPage({super.key});

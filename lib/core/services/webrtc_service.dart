@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:frontend/core/network/websocket_rtc_constant.dart';
 import 'package:web_socket_channel/io.dart';
 
 typedef OnRemoteStream = void Function(String peerId, MediaStream stream);
@@ -34,8 +35,8 @@ class WebRTCService {
 
     try {
       // Connect to WS server
-      _channel = IOWebSocketChannel.connect("ws://192.168.1.107:3000");
-      debugPrint("Connecting to WebSocket at ws://192.168.1.107:3000...");
+      _channel = IOWebSocketChannel.connect(WebSocketRtcConstant.webSocketUrl);
+      debugPrint("Connecting to WebSocket at ${WebSocketRtcConstant.webSocketUrl}");
     } catch (e) {
       debugPrint("WebSocket connection failed: $e");
       return;
@@ -50,24 +51,24 @@ class WebRTCService {
         final type = data['type'];
 
         switch (type) {
-          case 'new-user':
+          case WebSocketRtcConstant.newUserWebsocket:
             debugPrint(" New user joined: ${data['id']}");
             _createOffer(data['id']);
             break;
 
-          case 'offer':
+          case WebSocketRtcConstant.offerWebsocket:
             debugPrint("Received offer from: ${data['from']}");
             await _handleOffer(data['from'], data['sdp']);
             break;
 
-          case 'answer':
+          case WebSocketRtcConstant.answerWebsocket:
             debugPrint("Received answer from: ${data['from']}");
             await _peerConnections[data['from']]?.setRemoteDescription(
               RTCSessionDescription(data['sdp'], 'answer'),
             );
             break;
 
-          case 'ice-candidate':
+          case WebSocketRtcConstant.iceCandidateWebsocket:
             debugPrint("ICE candidate from: ${data['from']}");
             final candidate = RTCIceCandidate(
               data['candidate']?['candidate'],
@@ -77,14 +78,14 @@ class WebRTCService {
             await _peerConnections[data['from']]?.addCandidate(candidate);
             break;
 
-          case 'chat':
+          case WebSocketRtcConstant.chatWebsocket:
             final from = (data['from'] ?? 'unknown').toString();
             final text = (data['text'] ?? '').toString();
-            debugPrint("💬 Chat from $from: $text");
+            debugPrint("Chat from $from: $text");
             onMessageReceived?.call(from, text);
             break;
 
-          case 'user-left':
+          case WebSocketRtcConstant.userLeftWebsocket:
             debugPrint(" User left: ${data['id']}");
             _removePeer(data['id']);
             break;
@@ -100,14 +101,14 @@ class WebRTCService {
 
     // Join room
     debugPrint("Sending join room request: $roomId / $selfId");
-    _channel.sink.add(jsonEncode({'type': 'join', 'room': roomId, 'id': selfId}));
+    _channel.sink.add(jsonEncode({'type': WebSocketRtcConstant.joinWebsocket, 'room': roomId, 'id': selfId}));
   }
 
 
   Future<RTCPeerConnection> _createPeerConnection(String peerId) async {
     final config = {
       'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': WebSocketRtcConstant.stunUrl},
       ]
     };
 
@@ -130,7 +131,7 @@ class WebRTCService {
     // ICE candidates
     pc.onIceCandidate = (candidate) {
       _channel.sink.add(jsonEncode({
-        'type': 'ice-candidate',
+        'type': WebSocketRtcConstant.iceCandidateWebsocket,
         'from': selfId,
         'to': peerId,
         'candidate': candidate.toMap(),
@@ -166,7 +167,7 @@ class WebRTCService {
     await pc.setLocalDescription(offer);
 
     _channel.sink.add(jsonEncode({
-      'type': 'offer',
+      'type': WebSocketRtcConstant.offerWebsocket,
       'from': selfId,
       'to': peerId,
       'sdp': offer.sdp,
@@ -182,7 +183,7 @@ class WebRTCService {
     await pc.setLocalDescription(answer);
 
     _channel.sink.add(jsonEncode({
-      'type': 'answer',
+      'type': WebSocketRtcConstant.answerWebsocket,
       'from': selfId,
       'to': peerId,
       'sdp': answer.sdp,
@@ -193,7 +194,7 @@ class WebRTCService {
   /// Send text message via the server (broadcast to room)
   void sendChat(String message) {
     _channel.sink.add(jsonEncode({
-      'type': 'chat',
+      'type': WebSocketRtcConstant.chatWebsocket,
       'room': roomId,
       'id': selfId,
       'text': message,
