@@ -1,17 +1,11 @@
 # frontend Realtime Voice Chat + AI Assistant (Flutter)
 
 Flutter client for a **real-time voice chat + AI assistant**. It showcases:
-- Mock **login** (JWT from backend)
+- Mock **login**
 - **Text chat** over Socket.IO with **SQLite** persistence
 - **Voice calls** with **WebRTC (audio-only)** using free STUN
 - **AI voice**: record → upload to backend → **STT → LLM → TTS** → playback
 - Clean Architecture + Riverpod + Dio
-
-> **Backend required:** a Node/Nest server exposing:
-> - `POST /auth/mock-login` → `{ token, user:{id,username} }`
-> - Socket.IO at `/ws`
-> - `POST /v1/ai/voice` (multipart field `file`) → `{ text, audioUrl }`
-
 ---
 
 ## Quick start
@@ -53,7 +47,6 @@ Flutter client for a **real-time voice chat + AI assistant**. It showcases:
 
 - **Auth:** mock login calls backend and stores JWT in memory (Riverpod).
 - **Chat:** Socket.IO client; send `{to, text}`; receive persisted messages; local store in SQLite.
-- **Call:** WebRTC signaling over Socket.IO (`webrtc:offer/answer/ice`); STUN only.
 - **AI:** Record mic (AAC), upload via Dio multipart with progress; plays returned TTS MP3.
 
 ---
@@ -86,8 +79,7 @@ lib/
 ├─ shared/                 # shared widgets, theme
 └─ features/
    ├─ auth/ (domain|data|presentation)
-   ├─ chat/ (domain|data|presentation)   # Socket+SQLite
-   ├─ call/ (domain|data|presentation)   # WebRTC signaling
+   ├─ chat/ (domain|data|presentation)   # WebRTC + signaling Socket + chat Socket + SQLite
    └─ ai/   (domain|data|presentation)   # record → upload → play TTS
 ```
 
@@ -97,7 +89,6 @@ lib/
 
 Runtime config via **`--dart-define`**:
 
-- `BACKEND_URL` (required): e.g. `http://10.0.2.2:3001` (Android emulator) or `http://192.168.x.y:3001` (device)
 - `STUN_URL` (optional): default `stun:stun.l.google.com:19302`
 
 Example:
@@ -139,8 +130,7 @@ Create `android/app/src/main/res/xml/network_security_config.xml` (dev only) to 
 ## How to use (demo flow)
 
 1. **Login**: enter a username (e.g., `alice`). Backend upserts, returns JWT.
-2. **Chat**: paste your peer’s `userId`, send a message. It delivers via Socket.IO and is saved in SQLite.
-3. **Call**: navigate to Call, paste peer `userId`, tap **Call**. Peers exchange SDP/ICE via backend.
+2. **Chat**: Enter any room and start chat and voice with ur peers.
 4. **AI**: open AI page → **Start Recording** → speak → **Stop & Send**. See transcript and hear TTS.
 
 > Emulators can be flaky for audio. If you don’t hear anything, try a physical device.
@@ -162,24 +152,6 @@ flutter build apk --debug \
 ```
 
 (Release signing: set up `key.properties` & `build.gradle` per Flutter docs.)
-
----
-
-## Validation checks (quick)
-
-1. **Backend health**
-   ```bash
-   curl http://<backend-host>:3001/health
-   # {"ok":true}
-   ```
-
-2. **Login path works from app** (look for 200 in Dio logs).
-
-3. **Chat**: send from device A to device B; verify receipt and persistence after app restart.
-
-4. **Call**: status transitions `calling → connected`; audio routes to speaker.
-
-5. **AI**: progress bar during upload, transcript text shows, TTS plays.
 
 ---
 
@@ -211,7 +183,7 @@ flutter build apk --debug \
 ## Notes on design
 
 - **Dio-only** networking with a single `DioClient` (JWT interceptor, retries, progress).
-- **SocketService** abstraction so Chat & Call share the same eventing style.
+- **SocketService** abstraction so Chat & voice share the same eventing style.
 - **Clean Architecture**: domain (entities/usecases) is UI-agnostic; data (DS/DTO) is infra-aware; presentation is Riverpod + UI.
 - **SQLite** keeps chat history offline; swap to SQLCipher easily if needed.
 
